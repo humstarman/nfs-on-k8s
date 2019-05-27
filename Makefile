@@ -1,38 +1,41 @@
-TARGET_HOST=192.168.100.167
-TMP=tmp
-NFS_PATH=/opt/nfs
+include Makefile.inc
+
+define sed
+	@find ${MANIFEST} -type f -name "*.yaml" | xargs sed -i s?"$(1)"?"$(2)"?g
+endef
+
 NFS_IP=$(TARGET_HOST)
 
 all: prepare install deploy 
 
 prepare:
-	@./scripts/mk-ansible-hosts.sh -i ${TARGET_HOST} -g ${TMP} -o
+	@${SCRIPTS}/mk-ansible-hosts.sh -i ${TARGET_HOST} -g ${TMP} -o
 
 install:
-	@ansible ${TMP} -m script -a "./scripts/install-nfs.sh -p ${NFS_PATH}"
+	@ansible ${TMP} -m script -a "${SCRIPTS}/install-nfs.sh -p ${NFS_PATH}"
 
 cp:
-	@yes | cp ./manifest/controller.yaml.sed ./manifest/controller.yaml
+	@find ${MANIFEST} -type f -name "*.sed" | sed s?".sed"?""?g | xargs -I {} cp {}.sed {}
 
 sed:
-	@sed -i s?"{{.nfs.ip}}"?"${NFS_IP}"?g ./manifest/controller.yaml
-	@sed -i s?"{{.nfs.path}}"?"${NFS_PATH}"?g ./manifest/controller.yaml
+	$(call sed, {{.nfs.ip}}, ${NFS_IP})
+	$(call sed, {{.nfs.path}}, ${NFS_PATH})
 
 deploy: cp sed
-	-@kubectl create -f ./manifest/rbac.yaml
-	-@kubectl create -f ./manifest/controller.yaml
-	@kubectl create -f ./manifest/storageclass.yaml
+	-@kubectl create -f ${MANIFEST}/rbac.yaml
+	-@kubectl create -f ${MANIFEST}/controller.yaml
+	@kubectl create -f ${MANIFEST}/storageclass.yaml
 
 clean:
-	@kubectl delete -f ./manifest/rbac.yaml
-	@kubectl delete -f ./manifest/controller.yaml
-	@kubectl delete -f ./manifest/storageclass.yaml
-	@rm -f ./manifest/controller.yaml
-	@./scripts/rm-ansible-group.sh -g ${TMP}
+	@kubectl delete -f ${MANIFEST}/rbac.yaml
+	@kubectl delete -f ${MANIFEST}/controller.yaml
+	@kubectl delete -f ${MANIFEST}/storageclass.yaml
+	@rm -f ${MANIFEST}/controller.yaml
+	@${SCRIPTS}/rm-ansible-group.sh -g ${TMP}
 
 .PHONY : test
 test:
-	@kubectl create -f ./test/test-claim.yaml -f ./test/test-pod.yaml
+	@kubectl create -f ${TEST}/test-claim.yaml -f ${TEST}/test-pod.yaml
 
 clean-test:
-	@kubectl delete -f ./test/test-claim.yaml -f ./test/test-pod.yaml
+	@kubectl delete -f ${TEST}/test-claim.yaml -f ${TEST}/test-pod.yaml
